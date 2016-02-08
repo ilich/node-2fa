@@ -1,0 +1,16 @@
+<% include partials/header.ejs %>
+
+<div class="container profile-page">
+    <div class="row">
+        <div class="col-xs-12 col-sm-6 col-sm-offset-3 col-md-4 col-md-offset-4">
+            <strong>Username:</strong> <%= user.username %>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-xs-12 col-sm-6 col-sm-offset-3 col-md-4 col-md-offset-4 logout-panel">
+            <a class="btn btn-default" href="/logout" role="button">Logout</a>
+        </div>
+    </div>
+</div>
+
+<% include partials/footer.ejs %>
