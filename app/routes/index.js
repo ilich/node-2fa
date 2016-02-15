@@ -1,6 +1,9 @@
 var express = require('express');
 var router = express.Router();
 var passport = require('passport');
+var db = require('../db');
+var ObjectID = require('mongodb').ObjectID;
+var GoogleAuthenticator = require('passport-2fa-totp').GoogeAuthenticator;
 
 var authenticated = function (req, res, next) {
     if (req.isAuthenticated()) {
@@ -24,7 +27,8 @@ router.get('/', function(req, res, next) {
 router.post('/', passport.authenticate('login', {
     successRedirect: '/profile',
     failureRedirect: '/',
-    failureFlash: true
+    failureFlash: true,
+    badRequestMessage: 'Invalid username or password.'
 }));
 
 router.get('/register', function (req, res, next) {
@@ -35,10 +39,51 @@ router.get('/register', function (req, res, next) {
 });
 
 router.post('/register', passport.authenticate('register', {
-    successRedirect: '/profile',
+    successRedirect: '/setup-2fa',
     failureRedirect: '/register',
     failureFlash: true
 }));
+
+router.get('/setup-2fa', authenticated, function (req, res, next) {
+    var errors = req.flash('setup-2fa-error');
+    var qrInfo = GoogleAuthenticator.register(req.user.username);
+    req.session.qr = qrInfo.secret;
+    
+    return res.render('setup-2fa', {
+        errors: errors,
+        qr: qrInfo.qr
+    });
+});
+
+router.post('/setup-2fa', authenticated, function (req, res, next) {
+    if (!req.session.qr) {
+        req.flash('setup-2fa-error', 'The Account cannot be registered. Please try again.');
+        return res.redirect('/setup-2fa');
+    }
+    
+    var users = db.get().collection('users');
+    users.findOne(new ObjectID(req.user._id), function (err, user) {
+        if (err) {
+            req.flash('setup-2fa-error', err);
+            return res.redirect('/setup-2fa');
+        }
+        
+        if (!user) {
+            // User is not found. It might be removed directly from the database.
+            req.logout();
+            return res.redirect('/');
+        }
+        
+        users.update(user, { $set: { secret: req.session.qr } }, function (err) {
+            if (err) {
+                req.flash('setup-2fa-error', err);
+                return res.redirect('/setup-2fa');
+            }
+            
+            res.redirect('/profile');
+        });      
+    });
+});
 
 router.get('/profile', authenticated, function (req, res, next) {
     return res.render("profile", {

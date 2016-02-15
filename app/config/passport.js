@@ -1,10 +1,11 @@
 var db = require('../db');
 var ObjectID = require('mongodb').ObjectID;
-var LocalStrategy = require('passport-local').Strategy;
 var bcrypt = require('bcrypt-nodejs');
+var GoogleAuthenticator = require('passport-2fa-totp').GoogeAuthenticator;
+var TwoFAStartegy = require('passport-2fa-totp').Strategy;
 
 module.exports = function (passport) {
-    var INVALID_LOGIN = 'Incorrect username or password.';
+    var INVALID_LOGIN = 'Invalid username or password';
     
     passport.serializeUser(function (user, done) {
         return done(null, user._id);    
@@ -23,10 +24,13 @@ module.exports = function (passport) {
         });  
     });
     
-    passport.use('login', new LocalStrategy({
+    passport.use('login', new TwoFAStartegy({
         usernameField: 'username',
-        passwordField: 'password'
+        passwordField: 'password',
+        codeField: 'code'
     }, function (username, password, done) {
+        // 1st step verification: username and password
+        
         process.nextTick(function () {
             var users = db.get().collection('users');
             users.findOne({ username: username }, function (err, user) {
@@ -51,23 +55,38 @@ module.exports = function (passport) {
                 });
             });
         });
+    }, function (user, done) {
+        // 2nd step verification: TOTP code from Google Authenticator
+        
+        if (!user.secret) {
+            done(new Error("Google Authenticator is not setup yet."));
+        } else {
+            // Google Authenticator uses 30 seconds key period
+            // https://github.com/google/google-authenticator/wiki/Key-Uri-Format
+            
+            var secret = GoogleAuthenticator.decodeSecret(user.secret);
+            done(null, secret, 30);
+        }
     }));
     
-    passport.use('register', new LocalStrategy({
+    passport.use('register', new TwoFAStartegy({
         usernameField: 'username',
         passwordField: 'password',
-        passReqToCallback: true
+        passReqToCallback: true,
+        skipTotpVerification: true
     }, function (req, username, password, done) {
+        // 1st step verification: validate input and create new user
+        
         if (!/^[A-Za-z0-9_]+$/g.test(req.body.username)) {
-            return done(null, false, { message: 'Invalid username.' });
+            return done(null, false, { message: 'Invalid username' });
         }
         
         if (req.body.password.length === 0) {
-            return done(null, false, { message: 'Password is required.' });
+            return done(null, false, { message: 'Password is required' });
         }
         
         if (req.body.password !== req.body.confirmPassword) {
-            return done(null, false, { message: 'Passwords do not match.' });
+            return done(null, false, { message: 'Passwords do not match' });
         }
         
         var users = db.get().collection('users');
@@ -77,7 +96,7 @@ module.exports = function (passport) {
             }
             
             if (user !== null) {
-                return done(null, false, { message: 'Invalid username.' });
+                return done(null, false, { message: 'Invalid username' });
             }
             
             bcrypt.hash(password, null, null, function (err, hash) {

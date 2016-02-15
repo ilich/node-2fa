@@ -17,6 +17,7 @@
     "mongodb": "^2.1.4",
     "morgan": "~1.6.1",
     "passport": "^0.3.2",
+    "passport-2fa-totp": "0.0.1",
     "passport-local": "^1.0.0",
     "serve-favicon": "~2.3.0"
   }
