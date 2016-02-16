@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 var passport = require('passport');
 var db = require('../db');
+var tokenStorage = require('../utils/remember-me-token');
 var ObjectID = require('mongodb').ObjectID;
 var GoogleAuthenticator = require('passport-2fa-totp').GoogeAuthenticator;
 
@@ -25,11 +26,24 @@ router.get('/', function(req, res, next) {
 });
 
 router.post('/', passport.authenticate('login', {
-    successRedirect: '/profile',
     failureRedirect: '/',
     failureFlash: true,
     badRequestMessage: 'Invalid username or password.'
-}));
+}), function (req, res, next) {
+    if (!req.body.remember) {
+        return res.redirect('/profile');    
+    }
+    
+    // Create remember_me cookie and redirect to /profile page
+    tokenStorage.create(req.user, function (err, token) {
+        if (err) {
+            return next(err);
+        }
+        
+        res.cookie('remember_me', token, { path: '/', httpOnly: true, maxAge: 604800000 });
+        return res.redirect('/profile');
+    });    
+});
 
 router.get('/register', function (req, res, next) {
     var errors = req.flash('error');
@@ -92,8 +106,10 @@ router.get('/profile', authenticated, function (req, res, next) {
 });
 
 router.get('/logout', authenticated, function (req, res, next) {
-    req.logout();
-    return res.redirect('/');
+    tokenStorage.logout(req, res, function () {
+        req.logout();
+        return res.redirect('/');    
+    });
 });
 
 module.exports = router;

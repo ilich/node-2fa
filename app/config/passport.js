@@ -1,8 +1,10 @@
 var db = require('../db');
 var ObjectID = require('mongodb').ObjectID;
 var bcrypt = require('bcrypt-nodejs');
+var tokenStorage = require('../utils/remember-me-token');
 var GoogleAuthenticator = require('passport-2fa-totp').GoogeAuthenticator;
 var TwoFAStartegy = require('passport-2fa-totp').Strategy;
+var RememberMeStrategy = require('passport-remember-me').Strategy;
 
 module.exports = function (passport) {
     var INVALID_LOGIN = 'Invalid username or password';
@@ -117,6 +119,25 @@ module.exports = function (passport) {
                     return done(null, user);
                 });
             }); 
+        });
+    }));
+    
+    passport.use(new RememberMeStrategy(function (token, done) {
+        process.nextTick(function() {
+            tokenStorage.consume(token, function (err, user) {
+                if (err) {
+                    return done(err);
+                } else if (user === false) {
+                    return done(null, false);
+                } else {
+                    return done(null, user);
+                }
+            });
+        });
+    },
+    function (user, done) {
+        process.nextTick(function() {
+            tokenStorage.create(user, done);
         });
     }));
 };
